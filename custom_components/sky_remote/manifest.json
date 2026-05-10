@@ -1,0 +1,11 @@
+{
+  "domain": "sky_remote",
+  "name": "Sky Remote",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/your-repo/sky_remote",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "1.0.0",
+  "zeroconf": ["_rdk-rics._tcp.local."]
+}

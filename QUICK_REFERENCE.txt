@@ -1,0 +1,307 @@
+═══════════════════════════════════════════════════════════════════════════════
+FLUTTER AOT SKY REMOTE PROTOCOL - QUICK REFERENCE CARD
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ANSWER 1: COMMAND_NAME DISPATCHER                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Function:     feh_::vwb_32fd70 (0x32fd70)                                   │
+│ Type:         static late final <Map<String, dynamic>>                      │
+│ Offset:       0xd14                                                          │
+│ Pool Def:     [pp+0x8ce0]                                                   │
+│ Initializer:  feh_::_anon_closure_32fde4 (0x32fde4) [static]                │
+│ Purpose:      Routes "Pair Request" by command_name field                   │
+│ Key String:   [pp+0x8c30] "command_name"                                    │
+│ Context:      [pp+0x8c38] "Pair Request"                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ANSWER 2: FIELD EXTRACTION/VALIDATION DISPATCHER                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Function:     feh_::vZb_331c50 (0x331c50)                                   │
+│ Type:         static late final <Map<String, dynamic>>                      │
+│ Offset:       0xd10                                                          │
+│ Pool Def:     [pp+0x8d28]                                                   │
+│ Initializer:  feh_::_anon_closure_331cc4 (0x331cc4) [static]                │
+│ Purpose:      Routes Bind + KeyCommand field validators                     │
+│                                                                              │
+│ EXTRACTED FIELDS:                                                           │
+│   [pp+0x8e10] "status"      ← Bind                                          │
+│   [pp+0x8e18] "stbnonce"    ← Bind                                          │
+│   [pp+0x8e20] "pairingcode" ← Bind                                          │
+│   [pp+0x8e40] "authtoken"   ← KeyCommand                                    │
+│   [pp+0x8e48] "bind_id"     ← KeyCommand                                    │
+│   [pp+0x8e50] "cmd"         ← KeyCommand                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ANSWER 3: BIND-SPECIFIC vs KEYCOMMAND-SPECIFIC                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ BIND-SPECIFIC VALIDATORS:                                                  │
+│ ┌──────────────────────────────────────────────────────────────┐           │
+│ │ keh_IBa::cff_331184 (0x331184) [pp+0x8d60]                   │           │
+│ │   Error: [pp+0x8e68] "BindBadStatusError: error status is   │           │
+│ │           false"  ← UNIQUE BIND PROOF                        │           │
+│ │   Validates: "status" field (boolean)                        │           │
+│ ├──────────────────────────────────────────────────────────────┤           │
+│ │ keh_HBa::cff_330878 (0x330878) [pp+0x8d68]                   │           │
+│ │   Errors: BindCommandNameError, BindRequiredFieldsError      │           │
+│ │   Validates: authtoken, bind_id                              │           │
+│ ├──────────────────────────────────────────────────────────────┤           │
+│ │ keh_JBa::cff_3317c4 (0x3317c4) [pp+0x8d58]                   │           │
+│ │   Error: [pp+0x8e70] "BindRequiredFieldsError"               │           │
+│ │   Validates: Required fields (authtoken, bind_id)            │           │
+│ └──────────────────────────────────────────────────────────────┘           │
+│                                                                              │
+│ KEYCOMMAND-SPECIFIC VALIDATORS:                                            │
+│ ┌──────────────────────────────────────────────────────────────┐           │
+│ │ keh_KBa::yef_3305d0 (0x3305d0) [pp+0x8d38]                   │           │
+│ │   Error: [pp+0x8e78] "KeyCommandNameError: unexpected        │           │
+│ │           command name"  ← UNIQUE KEYCOMMAND PROOF           │           │
+│ │   Validates: "cmd" field                                      │           │
+│ ├──────────────────────────────────────────────────────────────┤           │
+│ │ keh_KBa::Aef_33041c (0x33041c) [pp+0x8d48]                   │           │
+│ │   Error: [pp+0x8e80] "KeyCommandRequiredFieldsError"         │           │
+│ │   Validates: Required fields (authtoken, bind_id)            │           │
+│ └──────────────────────────────────────────────────────────────┘           │
+│                                                                              │
+│ SHARED (TYPE DISCRIMINATOR):                                               │
+│ ┌──────────────────────────────────────────────────────────────┐           │
+│ │ heh_XAa::Vef_331690 (0x331690) [pp+0x8e30]                   │           │
+│ │   Role: Type guard between Bind and KeyCommand               │           │
+│ │   Location: Between pairingcode (pp+0x8e20) and              │           │
+│ │             "Key Command Request" string (pp+0x8e38)         │           │
+│ │   Evidence: No error message reference (guard only)          │           │
+│ └──────────────────────────────────────────────────────────────┘           │
+│                                                                              │
+│ PROOF METHOD:                                                              │
+│   • Each function has unique error string reference                        │
+│   • BindBadStatusError appears ONLY after keh_IBa in pp.txt               │
+│   • KeyCommandNameError appears ONLY after keh_KBa in pp.txt              │
+│   • Error string positions match closure pool positions                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ANSWER 4: STATIC LINKS - STRING-TO-HANDLER NEIGHBORHOODS                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ ZONE A - PAIR PROTOCOL FIELDS (pp+0x8c38-0x8c60):                          │
+│   [pp+0x8c30] "command_name" ──┐                                           │
+│   [pp+0x8c38] "Pair Request"   ├─→ feh_::vwb_32fd70 (0x32fd70)            │
+│   [pp+0x8c40] "tid"            │                                            │
+│   [pp+0x8c48] "Soft Remote"    │                                            │
+│   [pp+0x8c50] "Comcast"        │                                            │
+│   [pp+0x8c58] "IPRemote"       │                                            │
+│   [pp+0x8c60] "controllernonce"└──→ Extracted by feh_RAa closures         │
+│                                                                              │
+│ ZONE B - DISPATCH MAP DEFINITIONS (pp+0x8ce0-0x8d28):                      │
+│   [pp+0x8ce0] Field <::.vwb> ───→ feh_::vwb_32fd70 (0x32fd70)             │
+│   [pp+0x8ce8] Closure (0x32fd24) → feh_RAa::_anon_closure_32fd24          │
+│   [pp+0x8d18] Closure (0x32fde4) → feh_::_anon_closure_32fde4 [init]      │
+│   [pp+0x8d28] Field <::.vZb> ───→ feh_::vZb_331c50 (0x331c50)             │
+│   [pp+0x8d38] Closure (0x3305d0) → keh_KBa::yef_3305d0                    │
+│   [pp+0x8d40] Closure (0x3304f8) → feh_RAa::_anon_closure_3304f8          │
+│   [pp+0x8d48] Closure (0x33041c) → keh_KBa::Aef_33041c                    │
+│   [pp+0x8d58] Closure (0x3317c4) → keh_JBa::cff_3317c4                    │
+│   [pp+0x8d60] Closure (0x331184) → keh_IBa::cff_331184                    │
+│   [pp+0x8d68] Closure (0x330878) → keh_HBa::cff_330878                    │
+│                                                                              │
+│ ZONE C - ERROR MESSAGES (pp+0x8e10-0x8e80):                               │
+│   [pp+0x8e10] "status" ────────────────→ keh_IBa (0x331184)                │
+│   [pp+0x8e18] "stbnonce" ─────────────→ feh_RAa (0x3304f8)                 │
+│   [pp+0x8e20] "pairingcode" ──────────→ feh_RAa (0x3304f8)                 │
+│   [pp+0x8e30] Closure (0x331690) ─────→ heh_XAa::Vef_331690               │
+│   [pp+0x8e38] "Key Command Request"                                         │
+│   [pp+0x8e40] "authtoken" ─────────────→ keh_KBa (0x33041c)                │
+│   [pp+0x8e48] "bind_id" ───────────────→ keh_KBa (0x33041c)                │
+│   [pp+0x8e50] "cmd" ────────────────────→ keh_KBa (0x3305d0)                │
+│   [pp+0x8e58] "Bind Request"                                                │
+│   [pp+0x8e60] "BindCommandNameError" ──→ keh_HBa (0x330878)                │
+│   [pp+0x8e68] "BindBadStatusError" ────→ keh_IBa (0x331184) ✓ PROOF        │
+│   [pp+0x8e70] "BindRequiredFieldsError" → keh_HBa, keh_JBa                 │
+│   [pp+0x8e78] "KeyCommandNameError" ───→ keh_KBa (0x3305d0)                │
+│   [pp+0x8e80] "KeyCommandRequiredErr" ─→ keh_KBa (0x33041c)                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ANSWER 5: NEXT INSPECTION TARGETS (Priority Order)                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ PRIORITY 1: Decode the dispatch maps                                        │
+│   1. feh_::_anon_closure_32fde4 (0x32fde4)                                 │
+│      └─ Initializes feh_::vwb_32fd70                                        │
+│         Q: Which command_name values are registered?                        │
+│         Q: What's the handler signature?                                    │
+│                                                                              │
+│   2. feh_::_anon_closure_331cc4 (0x331cc4)                                 │
+│      └─ Initializes feh_::vZb_331c50                                        │
+│         Q: How many Bind vs KeyCommand validators registered?               │
+│         Q: How is heh_XAa::Vef_331690 (0x331690) embedded?                 │
+│                                                                              │
+│ PRIORITY 2: Understand the entry point                                      │
+│   3. Wdh_::_anon_closure_32b8fc (0x32b8fc) [pp+0x16478]                    │
+│      └─ Top-level dispatcher                                                │
+│         Q: How is message type read from wire format?                       │
+│         Q: How does it route to vwb vs vZb?                                 │
+│                                                                              │
+│ PRIORITY 3: Type discrimination                                             │
+│   4. heh_XAa::Vef_331690 (0x331690)                                        │
+│      └─ Bind vs KeyCommand discriminator                                    │
+│         Q: Is this an enum guard or field check?                            │
+│         Q: What preconditions trigger each branch?                          │
+│                                                                              │
+│ PRIORITY 4: Simplest validator                                              │
+│   5. keh_IBa::cff_331184 (0x331184) [BIND status check]                    │
+│      └─ Single-field validator → easiest reverse                            │
+│         • Single error: "BindBadStatusError"                                │
+│         • Single field: "status" (boolean)                                  │
+│         • Immediate error string reference at [pp+0x8e68]                   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+SOURCE EVIDENCE
+━━━━━━━━━━━━━━━
+  out/pp.txt (Object Pool):
+    • Lines 6040-6140  — Field definitions & strings
+    • Lines 18495-18510 — Top-level dispatcher
+  
+  out/ida_script/addNames.py (Symbol Registry):
+    • Lines 9716-9909  — All target symbol definitions
+  
+  Verification: All offsets match pp.txt line numbers within ±2 lines
+
+ANALYSIS METADATA
+━━━━━━━━━━━━━━━━
+  Timestamp: 12 Mar 2025
+  Workspace: /Users/jtaylor/Downloads/.../com.entos.monarch.remote.uk.apk
+  Files Modified: 1 (quick-reference updated with runtime/builder addendum)
+  Error-Backed Claims: 9 (each with pool offset proof)
+  Cross-References: 47 (function-to-string mappings)
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ANSWER 6: CURRENT AUTHTOKEN / BIND-BUILDER LEAD                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ The parser/validator map analysis above is still valid, but the active      │
+│ authtoken investigation has now moved downstream into the bind builder.     │
+│                                                                              │
+│ USEFUL PATH (runtime/static offsets):                                        │
+│   33060c -> 32c768 -> 32c7a4 -> 3f3844 -> 55c414/55c328 -> 330770          │
+│                                                                              │
+│ WHAT IS NOW PROVEN:                                                          │
+│   • 330770 / serializer are downstream only                                 │
+│   • 3f3844 useful path is the class-0x10b7 loop branch                      │
+│   • 0x55a064 is a forwarding seam, not the token builder                    │
+│   • 5649ec -> 3de8b0 is structural scaffolding                              │
+│   • 0x3f3954 is a sibling branch, not the successful Bind branch            │
+│                                                                              │
+│ WHAT FRIDAOUTPUT13 ADDED:                                                    │
+│   • corrected 55b6d0 detour is now fully demoted                            │
+│   • by 3306fc, x0 == x1 +0x20 and x0 +0x8 already holds final token         │
+│   • serializer arg1 +0x6c is now directly proven to be the object at        │
+│     55c414 retval +0x10                                                     │
+│   • that +0x6c object later points back to the original 55c414 retval       │
+│     through its own +0x10                                                   │
+│                                                                              │
+│ WHAT THE SMALL AUTH-INPUTS PROBE ADDED:                                      │
+│   • `33060c arg2` is exactly the `32e990` parser retval on the Pair leg     │
+│   • compressed-ref decoding on that parser object recovers the               │
+│     `pairingcode` field directly                                             │
+│   • compressed-ref decoding on `33060c post-arg1 +0x20 +0x8` directly       │
+│     recovers the live Base64 authtoken string                                │
+│   • `33060c` therefore mutates the bind-parent in place before serializer    │
+│   • static narrowing now points at `330654 -> 330674 -> 31b530` as the      │
+│     exact population seam to study next                                      │
+│                                                                              │
+│ WHAT FRIDAOUTPUT17 ADDED:                                                    │
+│   • corrected merge-helper live slots are runtime +0x14 / +0x18             │
+│   • 4deb7c now cleanly decodes the existing child on the useful path        │
+│   • existing child classId = 0x6721 (stable across 21 hits)                 │
+│   • resolved merge target = raw 0x3d8f58 / Ghidra 0x4d8f58                  │
+│     (stable across 21 hits)                                                 │
+│   • class 0x6721 matches the same wrapper family allocated for the          │
+│     serializer-visible +0x6c child                                          │
+│   • helper post-state advances old child -> new child in slot +0x18         │
+│                                                                              │
+│ WHAT FRIDAOUTPUT18 ADDED:                                                    │
+│   • direct 0x3d8f58 hook attached, but its first caller gate was too tight  │
+│   • the surrounding 4deb7c state still exposed the merge effect             │
+│   • old wrapper's live +0xc changes from sentinel to the new child B        │
+│   • best current read: class-0x6721 callee links wrapper nodes into a list  │
+│                                                                              │
+│ WHAT THE GHYDRA UPSTREAM PASS ADDED:                                         │
+│   • 0x4d8f58 is only a thunk; 0x642624 is only identity-hash logic          │
+│   • 0x664294 is only an allocator stub                                      │
+│   • 0x43060c's closure-selected helpers are parser/validator machinery      │
+│   • 0x430770/0x4307e0 show the key result:                                  │
+│       "authtoken" is serialized directly from a saved object field +0x7     │
+│   • "tid" is serialized from a nested object at saved object +0x13          │
+│   • therefore the token is already present before serializer entry and is   │
+│     carried through, not generated in the late builder/merge corridor       │
+│                                                                              │
+│ SUPERSEDING LIVE-BRANCH RESULT:                                              │
+│   • the real generator sits one step earlier: 0x4308c8 -> 0x4309e4          │
+│   • 0x430d58 parses handshake fields: command_name, status, stbnonce,       │
+│     pairingcode, and name                                                    │
+│   • 0x4308c8 builds the class-0x28e object whose +0x7 later becomes         │
+│     serialized "authtoken"                                                   │
+│   • that +0x7 value is returned by 0x4309e4                                 │
+│   • raw call flow now shows a 2-stage recipe, not a flat one-shot hash:     │
+│     1) hex-decode local +0x13, then append pairingcode, then local +0xb     │
+│        and hash                                                              │
+│     2) append stbnonce, then digest1, then "biT43y" and hash again          │
+│   • carried local-field provenance now traced:                               │
+│     - auth-local object is populated by 0x43de9c                             │
+│     - auth-local +0xb comes from source-object +0x17 after 0x43e74c         │
+│     - auth-local +0x13 is metadata-selected from source-object +0x13         │
+│     - that source object is built by 0x43ccbc                                │
+│     - one feeder (0x43cc60) copies source +0x13 from earlier +0x17 and      │
+│       source +0x17 from earlier +0x23                                        │
+│     - that earlier object is class "Zdf"                                     │
+│     - earlier Zdf +0x23 is a derived 2-state selector flag, not raw input    │
+│     - earlier Zdf +0x17 is another nested payload object whose own fields    │
+│       continue downstream                                                     │
+│     - current best nonce interpretation has shifted: local +0x13 now fits    │
+│       the hex-decoded nonce-like input better than local +0xb                │
+│     - local +0xb now looks like a transformed controller-profile string      │
+│       selected via 0x43e74c -> 0x4265dc from the qAa/Zdf path, not nonce     │
+│       material                                                                │
+│     - that qAa profile family now maps more tightly to the Pair Request      │
+│       identity fields: qAa.name = "Soft Remote", qAa.waf =                  │
+│       manufacturer = "Comcast", qAa.Edf = model = "IPRemote"                │
+│     - concrete oracle replay now rules out the naive mapping: using stripped  │
+│       controllernonce bytes plus raw request name/manufacturer/model/tid      │
+│       (and response name) does NOT reproduce the captured authtoken           │
+│     - so the remaining uncertainty is upstream normalization/selection, not   │
+│       the 2-stage SHA-256 + Base64 structure                                  │
+│   • digest internals now look like standard SHA-256 state init/feed/final    │
+│     over those 2 staged byte sequences                                       │
+│   • 0x430b10 then passes the final 32-byte digest into a codec object beside │
+│     "data", "base64", the standard Base64 alphabet, "==", and explicit      │
+│     invalid-base64 error strings                                             │
+│   • so the final value now looks like standard Base64 of the SHA-256 digest  │
+│                                                                              │
+│ CURRENT LIVE LEAD: 55c414 / 55c328 PACKAGING REGION                         │
+│   • 55b6d0 is statically interesting but currently off-path at runtime      │
+│   • 55c414 still receives the live parent and returns one object in an      │
+│     adjacent pair whose neighbor later becomes serializer slot +0x6c        │
+│   • the decisive mutation still sits upstream in the 33060c inline block,   │
+│     but the next live seam after 4deb7c is now the class-0x6721 callee      │
+│     at raw 0x3d8f58 / Ghidra 0x4d8f58                                       │
+│                                                                              │
+│ GHIDRA REBASE NOTE:                                                          │
+│   Add 0x100000 to runtime/static offsets in the current Ghidra project.     │
+│   Examples:                                                                  │
+│     32c768 -> 42c768                                                         │
+│     3f3844 -> 4f3844                                                         │
+│     45b6d0 -> 55b6d0                                                         │
+│     3d8f58 -> 4d8f58                                                         │
+│                                                                              │
+│ WHAT WE'RE DOING NEXT:                                                       │
+│   • the generation site is now identified                                    │
+│   • any further work would just refine the exact byte recipe or confirm the │
+│     final encoding dynamically                                               │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘

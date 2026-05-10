@@ -1,0 +1,34 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sky Remote",
+        "description": "Searching for Sky boxes on your network…",
+        "data": {
+          "device": "Select a device"
+        }
+      },
+      "manual": {
+        "title": "Manual Setup",
+        "description": "Enter the IP address of your Sky box.",
+        "data": {
+          "host": "IP Address",
+          "port": "Port"
+        }
+      },
+      "zeroconf_confirm": {
+        "title": "Sky Box Discovered",
+        "description": "A Sky box named **{name}** was found at {host}. Do you want to set it up?"
+      }
+    },
+    "abort": {
+      "already_configured": "This Sky box is already configured.",
+      "cannot_connect": "Could not connect to the Sky box. Make sure it is powered on."
+    },
+    "error": {
+      "cannot_connect": "Could not connect. Check the IP address and make sure the box is on.",
+      "pair_failed": "Pairing failed. Try again.",
+      "bind_failed": "Binding failed. Authentication error."
+    }
+  }
+}
