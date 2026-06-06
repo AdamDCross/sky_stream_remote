@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import os
+from pathlib import Path
 import re
 import socket
 import ssl
@@ -21,9 +22,6 @@ import uuid
 
 from .const import (
     AUTH_SALT,
-    CA_CERT_PEM,
-    CLIENT_CERT_PEM,
-    CLIENT_KEY_PEM,
     DEFAULT_PORT,
 )
 
@@ -34,6 +32,11 @@ _OP_TEXT = 0x1
 _OP_CLOSE = 0x8
 _OP_PING = 0x9
 _OP_PONG = 0xA
+
+_CERT_PATTERN = re.compile(
+    r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
+    re.DOTALL,
+)
 
 
 class SkyRemoteError(Exception):
@@ -75,16 +78,59 @@ async def is_box_reachable(
         return False
 
 
-def _compute_cert_fingerprint() -> str:
-    """SHA-256 of the leaf client certificate DER."""
-    pem_blocks = re.findall(
-        r"-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----",
-        CLIENT_CERT_PEM,
-        re.DOTALL,
+def _get_cert_paths() -> tuple[Path, Path]:
+    """Locate the packaged client certificate chain and private key."""
+    package_dir = Path(__file__).resolve().parent
+    cert_dir = package_dir / "certs"
+
+    cert_path: Path | None = None
+    key_path: Path | None = None
+    pem_files = sorted(cert_dir.glob("*.pem"))
+
+    for pem_path in pem_files:
+        pem_name = pem_path.name.lower()
+        if key_path is None and "key" in pem_name:
+            key_path = pem_path
+        elif cert_path is None and "key" not in pem_name:
+            cert_path = pem_path
+
+        if cert_path is None or key_path is None:
+            pem_text = pem_path.read_text(encoding="utf-8")
+            if key_path is None and "PRIVATE KEY" in pem_text:
+                key_path = pem_path
+            elif cert_path is None and "BEGIN CERTIFICATE" in pem_text:
+                cert_path = pem_path
+
+        if cert_path is not None and key_path is not None:
+            break
+
+    if cert_path is not None and key_path is not None:
+        return cert_path, key_path
+
+    raise SkyRemoteError(
+        f"Client certificate files not found in {cert_dir}"
     )
+
+
+def _read_cert_chain_pem(cert_path: Path) -> str:
+    """Read a certificate chain PEM file and keep certificate blocks only."""
+    pem_blocks = _CERT_PATTERN.findall(cert_path.read_text(encoding="utf-8"))
     if not pem_blocks:
         raise SkyRemoteError("No certificate found for fingerprint")
-    leaf_der = base64.b64decode(pem_blocks[0].replace("\n", ""))
+    return "\n".join(pem_blocks) + "\n"
+
+
+def _compute_cert_fingerprint(cert_chain_pem: str) -> str:
+    """SHA-256 of the leaf client certificate DER."""
+    pem_blocks = _CERT_PATTERN.findall(cert_chain_pem)
+    if not pem_blocks:
+        raise SkyRemoteError("No certificate found for fingerprint")
+    leaf_der = base64.b64decode(
+        pem_blocks[0]
+        .replace("-----BEGIN CERTIFICATE-----", "")
+        .replace("-----END CERTIFICATE-----", "")
+        .replace("\n", "")
+    )
     return hashlib.sha256(leaf_der).hexdigest()
 
 
@@ -115,35 +161,37 @@ def compute_authtoken(
     return base64.b64encode(stage2).decode("utf-8")
 
 
-def _create_ssl_context() -> ssl.SSLContext:
-    """Create an SSL context with the embedded mTLS client certificate."""
+def _create_ssl_context(cert_chain_pem: str, key_path: Path) -> ssl.SSLContext:
+    """Create an SSL context with the packaged mTLS client certificate."""
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     ctx.set_alpn_protocols(["http/1.1"])
 
-    tmpdir = tempfile.mkdtemp(prefix="skyremote_")
-    cert_path = os.path.join(tmpdir, "client.pem")
-    key_path = os.path.join(tmpdir, "client.key")
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        prefix="skyremote_",
+        suffix=".pem",
+        delete=False,
+        encoding="utf-8",
+    ) as cert_file:
+        cert_file.write(cert_chain_pem)
+        cert_path = cert_file.name
 
-    with open(cert_path, "w") as f:
-        f.write(CLIENT_CERT_PEM)
-    with open(key_path, "w") as f:
-        f.write(CLIENT_KEY_PEM)
-
-    ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
-
-    os.unlink(cert_path)
-    os.unlink(key_path)
-    os.rmdir(tmpdir)
+    try:
+        ctx.load_cert_chain(certfile=cert_path, keyfile=os.fspath(key_path))
+    finally:
+        os.unlink(cert_path)
 
     return ctx
 
 
 # Pre-compute at module load — cert never changes
-_CERT_FINGERPRINT = _compute_cert_fingerprint()
-_SSL_CONTEXT = _create_ssl_context()
+_CERT_PATH, _KEY_PATH = _get_cert_paths()
+_CERT_CHAIN_PEM = _read_cert_chain_pem(_CERT_PATH)
+_CERT_FINGERPRINT = _compute_cert_fingerprint(_CERT_CHAIN_PEM)
+_SSL_CONTEXT = _create_ssl_context(_CERT_CHAIN_PEM, _KEY_PATH)
 
 
 def _ws_mask(data: bytes, mask_key: bytes) -> bytes:
