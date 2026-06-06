@@ -52,11 +52,11 @@ Discovery → TLS+mTLS Connect → WebSocket Upgrade → Pair → Auth Token →
 
 Sky STBs advertise themselves on the local network via **mDNS** (Zeroconf/Bonjour).
 
-| Field | Value |
-|-------|-------|
-| Service type | `_rics._tcp.local.` |
-| Port | `8091` |
-| Properties | `wol_mac`, `wowl_mac` (MAC address for Wake-on-LAN) |
+| Field        | Value                                               |
+|--------------|-----------------------------------------------------|
+| Service type | `_rdk-rics._tcp.local.`                             |
+| Port         | `8091`                                              |
+| Properties   | `wol_mac`, `wowl_mac` (MAC address for Wake-on-LAN) |
 
 ### Wake-on-LAN
 
@@ -72,25 +72,25 @@ The STB listens on **TCP port 8091** and requires **TLS 1.3** with **mutual TLS 
 
 ### SSL Context Configuration
 
-| Parameter | Value |
-|-----------|-------|
-| Protocol | TLS 1.3 (minimum TLS 1.2) |
-| Cipher | `TLS_AES_256_GCM_SHA384` (negotiated) |
-| Server certificate verification | **Disabled** (`CERT_NONE`) |
-| Check hostname | **Disabled** |
-| SNI (Server Name Indication) | `sky.xcal.tv` |
-| ALPN | `http/1.1` |
-| Client certificate | EC P-256 leaf + chain (see [§11](#11-embedded-credentials)) |
-| Client private key | EC P-256 private key |
+| Parameter                       | Value                                                       |
+|---------------------------------|-------------------------------------------------------------|
+| Protocol                        | TLS 1.3 (minimum TLS 1.2)                                   |
+| Cipher                          | `TLS_AES_256_GCM_SHA384` (negotiated)                       |
+| Server certificate verification | **Disabled** (`CERT_NONE`)                                  |
+| Check hostname                  | **Disabled**                                                |
+| SNI (Server Name Indication)    | `sky.xcal.tv`                                               |
+| ALPN                            | `http/1.1`                                                  |
+| Client certificate              | EC P-256 leaf + chain (see [§11](#11-embedded-credentials)) |
+| Client private key              | EC P-256 private key                                        |
 
 ### Client Certificate Details
 
-| Field | Value |
-|-------|-------|
-| Subject CN | `sky.xcal.tv` |
-| Subject UID | `1DJ4xS3Rv9D3VJNtJq7QDqUkzxsXkZr3ry` |
-| Key type | EC P-256 (ECDSA-SHA256) |
-| Chain | 3 certificates (leaf → intermediate → root) |
+| Field                    | Value                                                              |
+|--------------------------|--------------------------------------------------------------------|
+| Subject CN               | `sky.xcal.tv`                                                      |
+| Subject UID              | `1DJ4xS3Rv9D3VJNtJq7QDqUkzxsXkZr3ry`                               |
+| Key type                 | EC P-256 (ECDSA-SHA256)                                            |
+| Chain                    | 3 certificates (leaf → intermediate → root)                        |
 | Leaf SHA-256 fingerprint | `a16031cd083792e156b761a5682c0069e37eeb119d7ccf32597f2f53e1fd859e` |
 
 > **Important:** The SHA-256 fingerprint of the leaf certificate's DER encoding is a critical input to the authentication token derivation (see [§6](#6-authentication-token-derivation)).
@@ -101,15 +101,15 @@ The STB listens on **TCP port 8091** and requires **TLS 1.3** with **mutual TLS 
 
 After TLS is established, the client upgrades to a WebSocket connection.
 
-| Parameter | Value |
-|-----------|-------|
-| URI path | `/iptarget` |
-| Full URI | `wss://<device-ip>:8091/iptarget` |
-| Origin | `https://<device-ip>:8091/` |
-| User-Agent | `Dart/3.9 (dart:io)` |
-| Cache-Control | `no-cache` |
-| Accept-Encoding | `gzip` |
-| Compression | **None** (permessage-deflate disabled) |
+| Parameter       | Value                                  |
+|-----------------|----------------------------------------|
+| URI path        | `/iptarget`                            |
+| Full URI        | `wss://<device-ip>:8091/iptarget`      |
+| Origin          | `https://<device-ip>:8091/`            |
+| User-Agent      | `Dart/3.9 (dart:io)`                   |
+| Cache-Control   | `no-cache`                             |
+| Accept-Encoding | `gzip`                                 |
+| Compression.    | **None** (permessage-deflate disabled) |
 
 All subsequent messages are JSON objects exchanged as WebSocket text frames.
 
@@ -132,12 +132,12 @@ Pairing establishes a session between the client and the STB. The STB automatica
 }
 ```
 
-| Field | Description |
-|-------|-------------|
-| `tid` | Transaction ID — a random UUID (v4). Used to correlate request/response. |
-| `name` | Display name for the remote (arbitrary string). |
-| `manufacturer` | Must be `"Comcast"`. |
-| `model` | Must be `"IPRemote"`. |
+| Field             | Description                                                                                                                                             |
+|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `tid`             | Transaction ID — a random UUID (v4). Used to correlate request/response.                                                                                |
+| `name`            | Display name for the remote (arbitrary string).                                                                                                         |
+| `manufacturer`    | Must be `"Comcast"`.                                                                                                                                    |
+| `model`           | Must be `"IPRemote"`.                                                                                                                                   |
 | `controllernonce` | A random UUID (v4 or v7) generated by the client. **This is a critical input to the auth token** — both the client and device must agree on this value. |
 
 ### Pair Response (STB → Client)
@@ -153,13 +153,13 @@ Pairing establishes a session between the client and the STB. The STB automatica
 }
 ```
 
-| Field | Description |
-|-------|-------------|
-| `name` | The STB's friendly name (e.g., "Living Room"). |
+| Field         | Description                                                                                    |
+|---------------|------------------------------------------------------------------------------------------------|
+| `name`        | The STB's friendly name (e.g., "Living Room").                                                 |
 | `pairingcode` | A 20-character string of space-separated digits, right-justified. This is an auth token input. |
-| `status` | `true` if pairing accepted. |
-| `stbnonce` | A random string generated by the STB. This is an auth token input. |
-| `tid` | Echoed back from the request. |
+| `status`      | `true` if pairing accepted.                                                                    |
+| `stbnonce`.   | A random string generated by the STB. This is an auth token input.                             |
+| `tid`.        | Echoed back from the request.                                                                  |
 
 > **Note:** The `pairingcode` is NOT displayed on the TV — it is sent automatically in the response. It is always 20 characters long, containing digits separated by spaces, right-justified (e.g., `"                 8 0"`).
 
@@ -169,12 +169,12 @@ Pairing establishes a session between the client and the STB. The STB automatica
 
 The auth token proves the client's identity to the STB. It is derived from four inputs that both sides know:
 
-| Input | Source | Example |
-|-------|--------|---------|
-| `cert_fingerprint` | SHA-256 of client certificate DER, as 64 hex chars | `a16031cd...859e` |
-| `pairingcode` | From Pair Response | `"                 8 0"` |
-| `controllernonce` | UUID sent in Pair Request | `"019ce95f-f60a-7e31-..."` |
-| `stbnonce` | From Pair Response | `"6VN~E-1}]Q"` |
+| Input              | Source                                             | Example                    |
+|--------------------|----------------------------------------------------|----------------------------|
+| `cert_fingerprint` | SHA-256 of client certificate DER, as 64 hex chars | `a16031cd...859e`          |
+| `pairingcode`      | From Pair Response                                 | `"                 8 0"`   |
+| `controllernonce`  | UUID sent in Pair Request                          | `"019ce95f-f60a-7e31-..."` |
+| `stbnonce`         | From Pair Response                                 | `"6VN~E-1}]Q"`             |
 
 ### Algorithm (Two-Stage SHA-256)
 
@@ -182,21 +182,21 @@ The auth token proves the client's identity to the STB. It is derived from four 
 ┌─────────────────────────────────────────────────────────────────┐
 │  STAGE 1: Inner Hash                                            │
 │                                                                 │
-│  input  = hex_decode(cert_fingerprint)  ← 32 bytes             │
-│         + pairingcode.encode("utf-8")   ← 20 bytes             │
-│         + controllernonce.encode("utf-8") ← 36 bytes (UUID)    │
-│                                         ─────────              │
+│  input  = hex_decode(cert_fingerprint)  ← 32 bytes              │
+│         + pairingcode.encode("utf-8")   ← 20 bytes              │
+│         + controllernonce.encode("utf-8") ← 36 bytes (UUID)     │
+│                                         ─────────               │
 │                                          88 bytes total         │
 │                                                                 │
 │  inner  = SHA-256(input)                ← 32 bytes              │
 ├─────────────────────────────────────────────────────────────────┤
 │  STAGE 2: Final Token                                           │
 │                                                                 │
-│  input  = stbnonce.encode("utf-8")      ← varies (~10 bytes)   │
-│         + inner                         ← 32 bytes             │
-│         + "biT43y".encode("utf-8")      ← 6 bytes (salt)       │
+│  input  = stbnonce.encode("utf-8")      ← varies (~10 bytes)    │
+│         + inner                         ← 32 bytes              │
+│         + "biT43y".encode("utf-8")      ← 6 bytes (salt)        │
 │                                                                 │
-│  token  = Base64( SHA-256(input) )      ← 44-char string       │
+│  token  = Base64( SHA-256(input) )      ← 44-char string        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -262,10 +262,10 @@ Binding authenticates the client to the STB using the computed auth token. A suc
 }
 ```
 
-| Field | Description |
-|-------|-------------|
+| Field.    | Description                                                              |
+|-----------|--------------------------------------------------------------------------|
 | `bind_id` | Integer session identifier. Include this in all subsequent key commands. |
-| `status` | `true` if authentication succeeded. |
+| `status`  | `true` if authentication succeeded.                                      |
 
 > **Warning:** The STB may lock out after repeated failed bind attempts. If this happens, reboot the STB to clear the lockout. Failed pair-only attempts (without bind) do NOT trigger lockout.
 
@@ -288,14 +288,14 @@ After a successful bind, the client can send key commands. The STB responds with
 }
 ```
 
-| Field | Description |
-|-------|-------------|
-| `command_name` | Must be `"Key Command Request"`. |
-| `tid` | Same transaction ID used throughout the session. |
-| `authtoken` | Same auth token from the bind step. |
-| `bind_id` | The `bind_id` received in the Bind Response. |
-| `cmd` | Command type — always `"keyatomic"` for key presses. |
-| `key` | The key name (see [§9](#9-key-names-reference)). |
+| Field          | Description                                          |
+|----------------|------------------------------------------------------|
+| `command_name` | Must be `"Key Command Request"`.                     |
+| `tid`          | Same transaction ID used throughout the session.     |
+| `authtoken`    | Same auth token from the bind step.                  |
+| `bind_id`      | The `bind_id` received in the Bind Response.         |
+| `cmd`          | Command type — always `"keyatomic"` for key presses. |
+| `key`          | The key name (see [§9](#9-key-names-reference)).     |
 
 ### Key Command Response (STB → Client)
 
@@ -320,62 +320,62 @@ Key names come from two sources:
 - **Box extras** (15 keys): Additional keys the STB firmware (RICS service) accepts but the app doesn't expose in its UI
 
 ### Navigation & Selection
-| Key Name | Function | Source |
-|----------|----------|--------|
-| `ArrowUp` | Navigate up | App enum |
-| `ArrowDown` | Navigate down | App enum |
-| `ArrowLeft` | Navigate left | App enum |
-| `ArrowRight` | Navigate right | App enum |
-| `Enter` | Select / OK / Confirm | App enum |
-| `Backspace` | Back (go back one level) | Box extra |
-| `Dismiss` | Dismiss / Back (alternative) | App enum |
-| `Home` | Go to home screen | App enum |
+| Key Name     | Function                     | Source    |
+|--------------|------------------------------|-----------|
+| `ArrowUp`    | Navigate up                  | App enum  |
+| `ArrowDown`  | Navigate down                | App enum  |
+| `ArrowLeft`  | Navigate left                | App enum  |
+| `ArrowRight` | Navigate right               | App enum  |
+| `Enter`      | Select / OK / Confirm        | App enum  |
+| `Backspace`  | Back (go back one level)     | Box extra |
+| `Dismiss`    | Dismiss / Back (alternative) | App enum  |
+| `Home`       | Go to home screen            | App enum  |
 
 ### Menu & Information
-| Key Name | Function | Source |
-|----------|----------|--------|
-| `AccessMenu` | Open the main menu (app calls it "more") | App enum |
-| `Info` | Show programme info | Box extra |
-| `Option` | Open options menu | App enum |
-| `Search` | Open search | App enum |
-| `Settings` | Open settings | App enum |
+| Key Name     | Function                                 | Source    |
+|--------------|------------------------------------------|-----------|
+| `AccessMenu` | Open the main menu (app calls it "more") | App enum  |
+| `Info`       | Show programme info                      | Box extra |
+| `Option`     | Open options menu                        | App enum  |
+| `Search`     | Open search                              | App enum  |
+| `Settings`   | Open settings                            | App enum  |
 
 ### Channel & Volume
-| Key Name | Function | Source |
-|----------|----------|--------|
-| `ChannelUp` | Channel up | Box extra |
+| Key Name      | Function     | Source    |
+|---------------|--------------|-----------|
+| `ChannelUp`   | Channel up   | Box extra |
 | `ChannelDown` | Channel down | Box extra |
-| `VolumeUp` | Volume up | Box extra |
-| `VolumeDown` | Volume down | Box extra |
-| `VolumeMute` | Toggle mute | Box extra |
+| `VolumeUp`    | Volume up    | Box extra |
+| `VolumeDown`  | Volume down  | Box extra |
+| `VolumeMute`  | Toggle mute  | Box extra |
 
 ### Playback
-| Key Name | Function | Source |
-|----------|----------|--------|
-| `MediaPlay` | Play / Pause toggle | App enum (mapped from `playPause`) |
-| `MediaRecord` | Record | Box extra |
-| `MediaRewind` | Rewind | Box extra |
-| `MediaFastForward` | Fast forward | Box extra |
+| Key Name           | Function            | Source                             |
+|--------------------|---------------------|------------------------------------|
+| `MediaPlay`        | Play / Pause toggle | App enum (mapped from `playPause`) |
+| `MediaRecord`      | Record              | Box extra                          |
+| `MediaRewind`      | Rewind              | Box extra                          |
+| `MediaFastForward` | Fast forward        | Box extra                          |
 
 ### Power & Source
-| Key Name | Function | Source |
-|----------|----------|--------|
-| `Power` | Toggle power on/off | App enum |
-| `Source` | Input source selector | Box extra |
-| `Plus` | Sky+ (DVR / on-demand) | App enum |
+| Key Name | Function               | Source    |
+|----------|------------------------|-----------|
+| `Power`  | Toggle power on/off    | App enum  |
+| `Source` | Input source selector  | Box extra |
+| `Plus`   | Sky+ (DVR / on-demand) | App enum  |
 
 ### Digits
-| Key Name | Function | Source |
-|----------|----------|--------|
+| Key Name            | Function                              | Source   |
+|---------------------|---------------------------------------|----------|
 | `Digit0` – `Digit9` | Numeric input (channel numbers, etc.) | App enum |
 
 ### Colour Buttons
-| Key Name | Function | Source |
-|----------|----------|--------|
-| `Red` | Red interactive button | Box extra |
-| `Green` | Green interactive button | Box extra |
+| Key Name | Function                  | Source    |
+|----------|---------------------------|-----------|
+| `Red`    | Red interactive button    | Box extra |
+| `Green`  | Green interactive button  | Box extra |
 | `Yellow` | Yellow interactive button | Box extra |
-| `Blue` | Blue interactive button | Box extra |
+| `Blue`   | Blue interactive button   | Box extra |
 
 ### Rejected Key Names (status: false)
 The following were tested but **not accepted** by the STB:
@@ -397,33 +397,33 @@ The following were tested but **not accepted** by the STB:
 ```
 Client                                          STB (192.168.69.149:8091)
   │                                                │
-  │──── mDNS Query (_rics._tcp.local.) ──────────>│
-  │<─── mDNS Response (IP, port 8091, MAC) ───────│
+  │──── mDNS Query (_rics._tcp.local.) ───────────>│
+  │<─── mDNS Response (IP, port 8091, MAC) ────────│
   │                                                │
   │──── TCP Connect ──────────────────────────────>│
-  │──── TLS 1.3 ClientHello (SNI=sky.xcal.tv) ───>│
+  │──── TLS 1.3 ClientHello (SNI=sky.xcal.tv) ────>│
   │     + Client Certificate (EC P-256)            │
-  │<─── TLS 1.3 ServerHello + Finished ───────────│
+  │<─── TLS 1.3 ServerHello + Finished ────────────│
   │                                                │
   │──── WebSocket Upgrade GET /iptarget ──────────>│
-  │<─── 101 Switching Protocols ──────────────────│
+  │<─── 101 Switching Protocols ───────────────────│
   │                                                │
   │──── Pair Request {controllernonce: UUID} ─────>│
-  │<─── Pair Response {pairingcode, stbnonce} ────│
+  │<─── Pair Response {pairingcode, stbnonce} ─────│
   │                                                │
   │  [Client computes authtoken]                   │
   │  cert_fp = SHA256(client_cert_DER)             │
   │  inner = SHA256(cert_fp_bytes ‖ pairingcode    │
-  │                 ‖ controllernonce)              │
+  │                 ‖ controllernonce)             │
   │  token = B64(SHA256(stbnonce ‖ inner ‖ biT43y))│
   │                                                │
   │──── Bind Request {authtoken} ─────────────────>│
-  │<─── Bind Response {status:true, bind_id:3} ───│
+  │<─── Bind Response {status:true, bind_id:3} ────│
   │                                                │
   │──── Key Command {key:"ArrowDown"} ────────────>│
-  │<─── {status: true} ──────────────────────────│
+  │<─── {status: true} ────────────────────────────│
   │──── Key Command {key:"Enter"} ────────────────>│
-  │<─── {status: true} ──────────────────────────│
+  │<─── {status: true} ────────────────────────────│
   │                                                │
   │──── WebSocket Close ──────────────────────────>│
 ```
@@ -434,9 +434,9 @@ Client                                          STB (192.168.69.149:8091)
 
 The APK contains the following credential files, which are required for mTLS:
 
-| File | Description |
-|------|-------------|
-| `soft_remote_key.pem` | EC P-256 private key (ECDSA) |
+| File                                                         | Description                                                |
+|--------------------------------------------------------------|------------------------------------------------------------|
+| `soft_remote_key.pem`                                        | EC P-256 private key (ECDSA)                               |
 | `xfinity.xcal.tv-ComcastRDKD2DECCICA1-20241014-20241114.pem` | Certificate chain (3 certs: leaf + intermediate + root CA) |
 
 These are embedded in the APK's assets and are the same for all installations of the app — the identity is shared, not per-user.

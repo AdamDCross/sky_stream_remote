@@ -17,6 +17,7 @@ import json
 import locale
 import os
 import pathlib
+import re
 import socket
 import ssl
 import struct
@@ -29,6 +30,13 @@ locale.setlocale(locale.LC_ALL, "")
 
 CACHE_DIR = pathlib.Path.home() / ".sky_remote"
 DEVICE_CACHE = CACHE_DIR / "last_device.json"
+CERT_DIR = pathlib.Path(__file__).resolve().parent / "certs"
+AUTH_SALT = "biT43y"
+MDNS_SERVICE_TYPE = "_rdk-rics._tcp.local."
+_CERT_PATTERN = re.compile(
+    r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
+    re.DOTALL,
+)
 
 
 def save_device_cache(host: str, port: int, mac: str, name: str):
@@ -51,8 +59,9 @@ def load_device_cache():
         pass
     return None
 
+
 try:
-    from zeroconf import ServiceBrowser, ServiceStateChange, Zeroconf
+    from zeroconf import ServiceBrowser, Zeroconf
 except ImportError:
     print("Missing dependency: pip install zeroconf")
     sys.exit(1)
@@ -66,67 +75,37 @@ except ImportError:
 
 
 # --------------------------------------------------
-# Embedded certificates (from APK assets)
+# Certificate loading
 # --------------------------------------------------
 
-CLIENT_KEY_PEM = """\
------BEGIN EC PARAMETERS-----
-BggqhkjOPQMBBw==
------END EC PARAMETERS-----
------BEGIN EC PRIVATE KEY-----
-MHcCAQEEIC6SaKhxcT/GDHtglEHWdhuczo5CN9aUPqcvBt06nTNqoAoGCCqGSM49
-AwEHoUQDQgAEOTYzQwBDZtPe22jtWJfqPf4FPwevN/s4pSMSVPStJvqpnM5CFFzi
-p8JGCNEvGnj/9rhRy7Pw2fTkAjjDOTHspA==
------END EC PRIVATE KEY-----
-"""
+def _get_cert_paths() -> tuple[pathlib.Path, pathlib.Path]:
+    """Locate the packaged client certificate chain and private key."""
+    cert_path = None
+    key_path = None
 
-CLIENT_CERT_PEM = """\
------BEGIN CERTIFICATE-----
-MIICqzCCAlGgAwIBAgIUBpcPWUFHiLVOTsI1KdIWQiAHwKcwCgYIKoZIzj0EAwIw
-JDEiMCAGA1UEAwwZQ29tY2FzdCBSREsgRDJEIEVDQyBJQ0EgMTAeFw0yNTA1MDI4
-MTU1MDVaFw0yNjA1MjgxNzU1MDVaMIGfMTIwMAYKCZImiZPyLGQBAQwiMURKNHhT
-M1J2OUQzVkpOdEpxN1FEcVVrenhzWGtacjNyeTEUMBIGA1UEAwwLc2t5LnhjYWwu
-dHYxEDAOBgNVBAsMB1hmaW5pdHkxEDAOBgNVBAoMB0NvbWNhc3QxDjAMBgNVBAcM
-BUVzc2V4MRIwEAYDVQQIDAlCcmVudHdvb2QxCzAJBgNVBAYTAkdCMFkwEwYHKoZI
-zj0CAQYIKoZIzj0DAQcDQgAEOTYzQwBDZtPe22jtWJfqPf4FPwevN/s4pSMSVPSt
-JvqpnM5CFFzip8JGCNEvGnj/9rhRy7Pw2fTkAjjDOTHspKOB5DCB4TA+BgNVHREE
-NzA1gRppcGNvbnRyb2wtcmljc0ByZGsuc2VydmljZYEXc2t5LXNvZnRyZW1vdGVA
-cmRrLnVzZXIwCwYDVR0PBAQDAgWgMBMGA1UdJQQMMAoGCCsGAQUFBwMCMAwGA1Ud
-EwEB/wQCMAAwHwYDVR0jBBgwFoAUcE8ZliAdb1LD6xZrZrpo6oI4Q64wLwYIKwYB
-BQUHAQEEIzAhMB8GCCsGAQUFBzABhhNodHRwOi8vb2NzcC54cGtpLmlvMB0GA1Ud
-DgQWBBR1S6mo2MU0DG/Di7CBdbXw+vKtoTAKBggqhkjOPQQDAgNIADBFAiAG0zGM
-btylRpcpcd3QexdI6B+PZ4pTmOVoFpUo4LVb0QIhAJGIPyF9DagqIYcUns8ZseRJ
-wjP5FMrLKuNUQfELO2nv
------END CERTIFICATE-----
------BEGIN CERTIFICATE-----
-MIIBsjCCAVegAwIBAgIUBzGYtexCSQ6tKXt7/gD6qKRCtk8wCgYIKoZIzj0EAwIw
-IzEhMB8GA1UEAwwYQ29tY2FzdCBSREsgRDJEIEVDQyBSb290MCAXDTI0MDIyODE5
-MjYwMVoYDzIwNTQwMjIwMTkxMzQxWjAkMSIwIAYDVQQDDBlDb21jYXN0IFJESyBE
-MkQgRUNDIElDQSAxMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWbM/CXd9amo4
-t5pmcJZGbhxuZP3e2EOTNu9j5nWuSlwz3bQ/cqYCJi23YFQFAntxqhcwCC3Vi4v0
-ZMcXYtMULKNmMGQwEgYDVR0TAQH/BAgwBgEB/wIBADAfBgNVHSMEGDAWgBSG/d1b
-GTbWy61CNEUbH76lmvZn1DAdBgNVHQ4EFgQUcE8ZliAdb1LD6xZrZrpo6oI4Q64w
-DgYDVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMCA0kAMEYCIQDzM8oTpL6AC5Gwd1d/
-fb94ipyQgswBbffeHZTURsPw8gIhALGKUGBLCAtwdXLiqMCeTBesliac+yZR3b/D
-J3MEo+oy
------END CERTIFICATE-----
------BEGIN CERTIFICATE-----
-MIIBsDCCAVagAwIBAgIUMi5R+Ioo/aAFMjepe9XGPrUMtxowCgYIKoZIzj0EAwIw
-IzEhMB8GA1UEAwwYQ29tY2FzdCBSREsgRDJEIEVDQyBSb290MCAXDTI0MDIyODE5
-MTM0MloYDzIwNTQwMjIwMTkxMzQxWjAjMSEwHwYDVQQDDBhDb21jYXN0IFJESyBE
-MkQgRUNDIFJvb3QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQM6kHWOmISlcpU
-TE+nxDShDp/QDmucVh0wWpHNFu/NDXRcPwNd6LPeShyM5TlBcUFzjgI7qsFqoDpW
-eB0jKk8zo2YwZDASBgNVHRMBAf8ECDAGAQH/AgEBMB8GA1UdIwQYMBaAFIb93VsZ
-NtbLrUI0RRsfvqWa9mfUMB0GA1UdDgQWBBSG/d1bGTbWy61CNEUbH76lmvZn1DAO
-BgNVHQ8BAf8EBAMCAYYwCgYIKoZIzj0EAwIDSAAwRQIgUTTH19CiP120ax8p3dYO
-IPbVsSWOfz01ZKit6T0TXncCIQDm9btfvUhVRyhHEScynV1v95q4podgkTTVJawo
-GrD1ZA==
------END CERTIFICATE-----
-"""
+    for pem_path in sorted(CERT_DIR.glob("*.pem")):
+        pem_name = pem_path.name.lower()
+        pem_text = pem_path.read_text(encoding="utf-8")
 
-AUTH_SALT = "biT43y"
+        if key_path is None and (
+            "key" in pem_name or "PRIVATE KEY" in pem_text
+        ):
+            key_path = pem_path
+        elif cert_path is None and "BEGIN CERTIFICATE" in pem_text:
+            cert_path = pem_path
 
-MDNS_SERVICE_TYPE = "_rdk-rics._tcp.local."
+        if cert_path is not None and key_path is not None:
+            return cert_path, key_path
+
+    raise RuntimeError(f"Client certificate files not found in {CERT_DIR}")
+
+
+def _read_cert_chain_pem(cert_path: pathlib.Path) -> str:
+    """Read a certificate chain PEM file and keep certificate blocks only."""
+    pem_blocks = _CERT_PATTERN.findall(cert_path.read_text(encoding="utf-8"))
+    if not pem_blocks:
+        raise RuntimeError("No certificate found for fingerprint")
+    return "\n".join(pem_blocks) + "\n"
 
 
 # --------------------------------------------------
@@ -211,9 +190,8 @@ def discover_devices(timeout: float = 5.0) -> list:
 
     zc = Zeroconf()
     listener = Listener()
-    browser = ServiceBrowser(zc, MDNS_SERVICE_TYPE, listener)
+    ServiceBrowser(zc, MDNS_SERVICE_TYPE, listener)
 
-    # Poll with early exit — return as soon as a device is found
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if devices:
@@ -254,46 +232,31 @@ def compute_authtoken(cert_fingerprint: str, pairingcode: str,
 # --------------------------------------------------
 
 def create_ssl_context() -> ssl.SSLContext:
-    """Create an SSL context with the mTLS client certificate.
-    
-    Prefers disk files (alongside the APK) if present; falls back to
-    the embedded PEM constants.
-    """
+    """Create an SSL context with the packaged mTLS client certificate."""
+    cert_path, key_path = _get_cert_paths()
+    cert_chain_pem = _read_cert_chain_pem(cert_path)
+
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     ctx.set_alpn_protocols(["http/1.1"])
 
-    # Try loading from disk files next to the APK root
-    apk_root = pathlib.Path(__file__).resolve().parent.parent
-    disk_key = apk_root / "soft_remote_key.pem"
-    disk_cert = apk_root / "xfinity.xcal.tv-ComcastRDKD2DECCICA1-20241014-20241114.pem"
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        prefix="skyremote_",
+        suffix=".pem",
+        delete=False,
+        encoding="utf-8",
+    ) as cert_file:
+        cert_file.write(cert_chain_pem)
+        temp_cert_path = cert_file.name
 
-    if disk_key.exists() and disk_cert.exists():
-        import re
-        # Disk cert file may have text headers; extract PEM blocks only
-        raw = disk_cert.read_text()
-        pem_blocks = re.findall(
-            r"(-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----)",
-            raw, re.DOTALL,
-        )
-        cert_pem = "\n".join(pem_blocks) + "\n"
-        key_pem = disk_key.read_text()
-    else:
-        cert_pem = CLIENT_CERT_PEM
-        key_pem = CLIENT_KEY_PEM
+    try:
+        ctx.load_cert_chain(certfile=temp_cert_path, keyfile=os.fspath(key_path))
+    finally:
+        os.unlink(temp_cert_path)
 
-    tmpdir = tempfile.mkdtemp(prefix="skyremote_")
-    cert_path = os.path.join(tmpdir, "client.pem")
-    key_path = os.path.join(tmpdir, "client.key")
-
-    with open(cert_path, "w") as f:
-        f.write(cert_pem)
-    with open(key_path, "w") as f:
-        f.write(key_pem)
-
-    ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
     return ctx
 
 
@@ -307,10 +270,12 @@ class SkyRemoteClient:
         self.port = port
         self.ws = None
         self.tid = str(uuid.uuid4())
-        self.controllernonce = str(uuid.uuid4())  # UUID sent on wire
+        self.controllernonce = str(uuid.uuid4())
         self.bind_id = None
         self.authtoken = None
         self.device_name = None
+        self._cert_path, self._key_path = _get_cert_paths()
+        self._cert_chain_pem = _read_cert_chain_pem(self._cert_path)
         self._ssl_ctx = create_ssl_context()
         self._cert_fingerprint = self._compute_cert_fingerprint()
 
@@ -336,20 +301,15 @@ class SkyRemoteClient:
 
     def _compute_cert_fingerprint(self) -> str:
         """SHA-256 of the leaf client certificate DER — used in auth token."""
-        import re as _re
-        apk_root = pathlib.Path(__file__).resolve().parent.parent
-        disk_cert = apk_root / "xfinity.xcal.tv-ComcastRDKD2DECCICA1-20241014-20241114.pem"
-        if disk_cert.exists():
-            raw = disk_cert.read_text()
-        else:
-            raw = CLIENT_CERT_PEM
-        pem_blocks = _re.findall(
-            r"-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----",
-            raw, _re.DOTALL,
-        )
+        pem_blocks = _CERT_PATTERN.findall(self._cert_chain_pem)
         if not pem_blocks:
             raise RuntimeError("No certificate found for fingerprint")
-        leaf_der = base64.b64decode(pem_blocks[0].replace("\n", ""))
+        leaf_der = base64.b64decode(
+            pem_blocks[0]
+            .replace("-----BEGIN CERTIFICATE-----", "")
+            .replace("-----END CERTIFICATE-----", "")
+            .replace("\n", "")
+        )
         return hashlib.sha256(leaf_der).hexdigest()
 
     async def close(self):
@@ -380,8 +340,6 @@ class SkyRemoteClient:
 
     async def bind(self, pairingcode: str, stbnonce: str) -> dict:
         """Compute auth token and send Bind Request."""
-        # local+0x13 = SHA256(client_cert_DER) — both sides know the cert
-        # local+0xb  = controllernonce UUID — sent in Pair Request
         self.authtoken = compute_authtoken(
             cert_fingerprint=self._cert_fingerprint,
             pairingcode=pairingcode,
@@ -418,16 +376,12 @@ class SkyRemoteClient:
 # Terminal UI
 # --------------------------------------------------
 
-# Verified working key names (tested against real Sky STB)
-# Source: App enum (VAa Dart enum) + brute-tested box extras
 VERIFIED_KEYS = [
-    # App enum keys (24 keys from VAa Dart enum in APK)
     "Power", "Home", "Enter", "Dismiss", "AccessMenu", "Option",
     "Search", "Settings", "MediaPlay", "Plus",
     "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
     "Digit0", "Digit1", "Digit2", "Digit3", "Digit4",
     "Digit5", "Digit6", "Digit7", "Digit8", "Digit9",
-    # Box extras (15 keys accepted by STB but not in app enum)
     "Backspace", "Info", "Source",
     "ChannelUp", "ChannelDown",
     "VolumeUp", "VolumeDown", "VolumeMute",
@@ -435,7 +389,6 @@ VERIFIED_KEYS = [
     "Red", "Green", "Yellow", "Blue",
 ]
 
-# Keyboard → remote key mapping for TUI
 KEYMAP = {}
 
 
@@ -446,11 +399,11 @@ def build_keymap():
     KEYMAP[curses.KEY_LEFT] = "ArrowLeft"
     KEYMAP[curses.KEY_RIGHT] = "ArrowRight"
     KEYMAP[curses.KEY_ENTER] = "Enter"
-    KEYMAP[10] = "Enter"         # Enter
-    KEYMAP[13] = "Enter"         # CR
-    KEYMAP[27] = "Dismiss"       # Escape → Back/Dismiss
+    KEYMAP[10] = "Enter"
+    KEYMAP[13] = "Enter"
+    KEYMAP[27] = "Dismiss"
     KEYMAP[curses.KEY_BACKSPACE] = "Backspace"
-    KEYMAP[127] = "Backspace"    # Backspace (macOS)
+    KEYMAP[127] = "Backspace"
     KEYMAP[ord("h")] = "Home"
     KEYMAP[ord("H")] = "Home"
     KEYMAP[ord("m")] = "AccessMenu"
@@ -463,8 +416,7 @@ def build_keymap():
     KEYMAP[ord("S")] = "Search"
     KEYMAP[ord("p")] = "Power"
     KEYMAP[ord("P")] = "Power"
-    # 'w'/'W' handled specially as smart wake (WoL + Power if needed)
-    KEYMAP[ord(" ")] = "MediaPlay"      # Space = Play (no PlayPause on box)
+    KEYMAP[ord(" ")] = "MediaPlay"
     KEYMAP[ord("r")] = "MediaRecord"
     KEYMAP[ord("R")] = "MediaRecord"
     KEYMAP[ord("x")] = "MediaRewind"
@@ -477,15 +429,12 @@ def build_keymap():
     KEYMAP[ord("/")] = "VolumeMute"
     KEYMAP[curses.KEY_PPAGE] = "ChannelUp"
     KEYMAP[curses.KEY_NPAGE] = "ChannelDown"
-    # Digit keys
     for d in range(10):
         KEYMAP[ord(str(d))] = f"Digit{d}"
-    # Function/colour keys
     KEYMAP[curses.KEY_F1] = "Red"
     KEYMAP[curses.KEY_F2] = "Green"
     KEYMAP[curses.KEY_F3] = "Yellow"
     KEYMAP[curses.KEY_F4] = "Blue"
-    # Source / Plus (Sky+)
     KEYMAP[ord("e")] = "Source"
     KEYMAP[ord("l")] = "Plus"
     KEYMAP[ord("L")] = "Plus"
@@ -493,7 +442,7 @@ def build_keymap():
 
 STATUS_LINE = ""
 LAST_KEY = ""
-MSG_LOG = []  # Rolling log of all received WS messages
+MSG_LOG = []
 MAX_LOG_LINES = 10
 
 
@@ -511,7 +460,6 @@ def draw_remote(stdscr, device_name: str, connected: bool):
                 pass
 
     def hline(y, x, length):
-        """Draw a horizontal line using ACS characters."""
         if 0 <= y < h and 0 <= x < w:
             try:
                 stdscr.hline(y, x, curses.ACS_HLINE, min(length, w - x))
@@ -519,14 +467,12 @@ def draw_remote(stdscr, device_name: str, connected: bool):
                 pass
 
     def box(uly, ulx, lry, lrx):
-        """Draw a box using curses.textpad.rectangle (ACS native chars)."""
         try:
             curses.textpad.rectangle(stdscr, uly, ulx, lry, lrx)
         except curses.error:
             pass
 
     def hdiv(y, x1, x2):
-        """Draw a horizontal divider with T-junctions at edges."""
         if 0 <= y < h:
             try:
                 stdscr.addch(y, x1, curses.ACS_LTEE)
@@ -535,7 +481,6 @@ def draw_remote(stdscr, device_name: str, connected: bool):
             except curses.error:
                 pass
 
-    # Title box
     box(0, 2, 2, 36)
     cprint(1, 12, "SKY REMOTE CONTROL", curses.A_BOLD)
 
@@ -543,11 +488,9 @@ def draw_remote(stdscr, device_name: str, connected: bool):
     attr = curses.color_pair(1) if connected else curses.color_pair(2)
     cprint(3, 4, f"Device: {device_name}  {status}", attr)
 
-    # Main remote box
-    L, R = 4, 35  # left and right edges
+    L, R = 4, 35
     box(5, L, 24, R)
 
-    # Section labels inside the box
     cprint(6,  L+2, "[p] Power         [h] Home")
     cprint(7,  L+2, "[s] Settings      [m] Menu")
     cprint(8,  L+2, "[i] Info          [o] Opt")
@@ -580,13 +523,11 @@ def draw_remote(stdscr, device_name: str, connected: bool):
     cprint(22, L+24, "B", 0)
     cprint(23, L+2, "[q] Quit")
 
-    # Status area
     y = 26
     cprint(y, 4, f"Last: {LAST_KEY}", curses.A_DIM)
     y += 1
     cprint(y, 4, f"{STATUS_LINE}", curses.A_DIM)
 
-    # Message log
     y += 2
     hline(y, 4, 31)
     cprint(y, 10, " Received Messages ", curses.A_BOLD)
@@ -607,7 +548,7 @@ async def tui_main(stdscr, client: SkyRemoteClient):
     global STATUS_LINE, LAST_KEY, MSG_LOG
 
     curses.curs_set(0)
-    curses.set_escdelay(50)  # Faster ESC key detection (default 1000ms)
+    curses.set_escdelay(50)
     stdscr.nodelay(True)
     stdscr.timeout(100)
 
@@ -624,7 +565,6 @@ async def tui_main(stdscr, client: SkyRemoteClient):
     connected = client.bind_id is not None
     device_name = client.device_name or "Unknown"
 
-    # Background task to listen for unsolicited messages
     incoming = asyncio.Queue()
 
     async def ws_listener():
@@ -638,7 +578,6 @@ async def tui_main(stdscr, client: SkyRemoteClient):
     listener_task = asyncio.create_task(ws_listener())
 
     while True:
-        # Drain any incoming messages
         while not incoming.empty():
             try:
                 raw = incoming.get_nowait()
@@ -692,32 +631,21 @@ async def tui_main(stdscr, client: SkyRemoteClient):
 # --------------------------------------------------
 
 def format_pairing_code(code: str) -> str:
-    """Format a raw digit string into the protocol's space-padded format.
-    
-    The app formats the pairing code as space-separated digits with
-    leading spaces to fill 20 characters total.
-    E.g. "8008800088" -> "               8 0 0 8 8 0 0 0 8 8"
-    Wait — looking at the capture: " 8 0 0 8 8 0 0 0 8 8" is 20 chars.
-    Pattern: each digit preceded by a space, total = 2*N chars with leading
-    spaces to pad to 20.
-    """
-    # Convert each digit to " D" format, then left-pad to 20 chars
+    """Format a raw digit string into the protocol's space-padded format."""
     spaced = " ".join(code.strip())
     return spaced.rjust(20)
 
 
 async def run(args, device=None):
     if args.host:
-        # Banner not yet printed for --host mode
         print("+==================================+")
         print("|       SKY REMOTE CONTROL         |")
         print("+==================================+")
         print()
 
-    # -- Step 1: Discovery --
     if device:
         if not args.host:
-            print()  # spacing after discovery output
+            print()
     elif args.host:
         host = args.host
         port = args.port or 8091
@@ -730,7 +658,6 @@ async def run(args, device=None):
     host = device.addresses[0] if device.addresses else device.host
     port = device.port
 
-    # -- Step 1b: Smart Wake --
     mac = device.mac or args.mac
     if not mac:
         cached = load_device_cache()
@@ -745,7 +672,6 @@ async def run(args, device=None):
             print(f"📡 Box unreachable — sending Wake-on-LAN to {mac}...")
             send_wol(mac)
             woke_via_wol = True
-            # Wait for the box to boot, polling until reachable
             print("⏳ Waiting for box to come online...", end="", flush=True)
             for i in range(15):
                 time.sleep(2)
@@ -757,7 +683,6 @@ async def run(args, device=None):
                 print()
                 print("⚠️  Box didn't respond after 30s — trying to connect anyway...")
 
-    # -- Step 2: Connect --
     print(f"🔌 Connecting to {host}:{port}...")
     client = SkyRemoteClient(host, port)
 
@@ -769,7 +694,6 @@ async def run(args, device=None):
 
     print("✅ WebSocket connected (mTLS)")
 
-    # -- Step 3: Pair --
     print("🤝 Sending Pair Request...")
     try:
         pair_resp = await client.pair()
@@ -791,19 +715,15 @@ async def run(args, device=None):
     if args.verbose:
         print(f"   Full response: {pair_resp}")
 
-    # -- Step 4: Get pairing code --
     if pairingcode:
-        # Device sends the pairing code in the response (auto-pair)
         print(f"   Pairing code (auto): \"{pairingcode}\"")
     else:
-        # Fallback: ask the user if not in response
         print()
         print("📺 A pairing code should now be displayed on your TV.")
         raw_code = input("Enter pairing code (digits only): ").strip()
         pairingcode = format_pairing_code(raw_code)
         print(f"   Formatted: \"{pairingcode}\"")
 
-    # -- Step 5: Bind --
     print("🔐 Computing auth token and binding...")
     try:
         bind_resp = await client.bind(pairingcode, stbnonce)
@@ -819,35 +739,20 @@ async def run(args, device=None):
 
     print(f"✅ Bound! bind_id={client.bind_id}")
 
-    # If we woke via WoL, send Power to bring box out of standby
     if woke_via_wol:
         print("⚡ Sending Power to wake from standby...")
-        await asyncio.sleep(1)  # Brief pause for box to be ready
+        await asyncio.sleep(1)
         try:
             await client.send_key("Power")
             print("✅ Power sent — box should be loading")
         except Exception as e:
             print(f"⚠️  Power send failed (try manually): {e}")
 
-    # Cache device for future quick-connect / WoL
     save_device_cache(host, port, mac, device_name)
 
     print()
-
-    # -- Step 6: Launch TUI --
     print("Launching remote control interface...")
 
-    def curses_wrapper(stdscr):
-        asyncio.get_event_loop().run_until_complete(tui_main(stdscr, client))
-
-    # We need to run curses in a way compatible with our async loop
-    # Use curses.wrapper with a nested event loop
-    loop = asyncio.get_event_loop()
-
-    def run_tui():
-        curses.wrapper(lambda stdscr: loop.run_until_complete(tui_main(stdscr, client)))
-
-    # Since we're already in an async context, we need a different approach
     stdscr = curses.initscr()
     curses.noecho()
     curses.cbreak()
@@ -885,7 +790,6 @@ Examples:
         import logging
         logging.basicConfig(level=logging.DEBUG)
 
-    # Discovery runs in sync context (before asyncio event loop)
     device = None
     if args.host:
         device = SkyDeviceInfo("Manual", args.host, args.port or 8091, [args.host])
@@ -900,12 +804,11 @@ Examples:
         devices = discover_devices(timeout=args.timeout)
 
         if not devices:
-            # Try cached device as fallback
             cached = load_device_cache()
             if cached:
                 print(f"📋 No devices discovered — using cached: {cached['name']} @ {cached['host']}")
                 device = SkyDeviceInfo(cached["name"], cached["host"],
-                                      cached["port"], [cached["host"]])
+                                       cached["port"], [cached["host"]])
                 device.mac = cached.get("mac")
             else:
                 print("❌ No Sky devices found. Use --host to specify manually.")

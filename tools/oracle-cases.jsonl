@@ -1,8 +1,0 @@
-{"label":"code-real-format","pairingcode":"               0 0 8","stbnonce":"Qu.=}B5}UZMJYAfq","bind_id":1}
-{"label":"code-trimmed","pairingcode":"0 0 8","stbnonce":"Qu.=}B5}UZMJYAfq","bind_id":1}
-{"label":"code-digits-only","pairingcode":"008","stbnonce":"Qu.=}B5}UZMJYAfq","bind_id":1}
-{"label":"code-single-leading-space","pairingcode":" 0 0 8","stbnonce":"Qu.=}B5}UZMJYAfq","bind_id":1}
-{"label":"nonce-real-format","pairingcode":"               0 0 8","stbnonce":"Qu.=}B5}UZMJYAfq","bind_id":1}
-{"label":"nonce-upper-alpha","pairingcode":"               0 0 8","stbnonce":"ABCDEFGHIJKLMNOP","bind_id":1}
-{"label":"nonce-lower-alpha","pairingcode":"               0 0 8","stbnonce":"abcdefghijklmnop","bind_id":1}
-{"label":"nonce-mixed-punct","pairingcode":"               0 0 8","stbnonce":"A1!b2@C3#d4$E5%f","bind_id":1}
