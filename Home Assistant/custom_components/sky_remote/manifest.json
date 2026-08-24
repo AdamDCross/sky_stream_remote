@@ -4,7 +4,7 @@
   "codeowners": [],
   "config_flow": true,
   "documentation": "https://github.com/jatatech/sky_stream_remote",
-  "iot_class": "local_push",
+  "iot_class": "local_polling",
   "requirements": [],
   "version": "1.0.0",
   "zeroconf": ["_rdk-rics._tcp.local."]

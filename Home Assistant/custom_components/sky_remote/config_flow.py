@@ -97,10 +97,16 @@ async def _discover_sky_devices(timeout: float = 5.0) -> list[dict[str, Any]]:
         listener = Listener()
         ServiceBrowser(zc, MDNS_SERVICE_TYPE, listener)
         import time
+        # After the first device appears, keep scanning for a short grace
+        # period so additional boxes on the network can also be found.
         deadline = time.monotonic() + timeout
+        grace_deadline = None
         while time.monotonic() < deadline:
             if devices:
-                break
+                if grace_deadline is None:
+                    grace_deadline = time.monotonic() + 2.0
+                elif time.monotonic() >= grace_deadline:
+                    break
             time.sleep(0.2)
         zc.close()
 

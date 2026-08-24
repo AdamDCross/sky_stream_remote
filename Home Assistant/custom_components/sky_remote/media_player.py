@@ -38,6 +38,9 @@ class SkyMediaPlayer(CoordinatorEntity[SkyRemoteCoordinator], MediaPlayerEntity)
     _attr_device_class = MediaPlayerDeviceClass.RECEIVER
     _attr_has_entity_name = True
     _attr_name = None  # Uses device name
+    # The protocol is fire-and-forget with no state query, so on/standby
+    # is tracked optimistically from the commands we send.
+    _attr_assumed_state = True
     _attr_supported_features = (
         MediaPlayerEntityFeature.TURN_ON
         | MediaPlayerEntityFeature.TURN_OFF
@@ -94,7 +97,11 @@ class SkyMediaPlayer(CoordinatorEntity[SkyRemoteCoordinator], MediaPlayerEntity)
         await self._send("VolumeDown")
 
     async def async_mute_volume(self, mute: bool) -> None:
-        """Send mute toggle."""
+        """Send mute toggle.
+
+        The box only exposes a toggle and reports no mute state, so the
+        requested `mute` value cannot be honoured — every call toggles.
+        """
         await self._send("VolumeMute")
 
     async def async_media_play(self) -> None:

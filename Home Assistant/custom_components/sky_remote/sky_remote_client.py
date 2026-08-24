@@ -252,6 +252,9 @@ class SkyRemoteClient:
         self.device_name: str | None = None
         self._ssl_ctx = _SSL_CONTEXT
         self._connected = False
+        self._reader_task: asyncio.Task | None = None
+        self._recv_queue: asyncio.Queue[bytes] = asyncio.Queue()
+        self._request_lock = asyncio.Lock()
 
     @property
     def connected(self) -> bool:
@@ -315,6 +318,9 @@ class SkyRemoteClient:
                 )
 
             self._connected = True
+            # Fresh queue so stale frames from a prior session can't leak in
+            self._recv_queue = asyncio.Queue()
+            self._reader_task = asyncio.create_task(self._read_loop())
             _LOGGER.debug("WebSocket connected to %s:%s", self.host, self.port)
         except SkyRemoteConnectionError:
             self._connected = False
@@ -325,11 +331,45 @@ class SkyRemoteClient:
                 f"Failed to connect to {self.host}:{self.port}: {err}"
             ) from err
 
+    async def _read_loop(self) -> None:
+        """Continuously read frames while connected.
+
+        Answers server keepalive pings even when no command is in
+        flight, queues text frames for `_recv`, and flips the
+        connected flag promptly when the link drops.
+        """
+        try:
+            while True:
+                opcode, payload = await _read_ws_frame(self._reader)
+                if opcode == _OP_TEXT:
+                    await self._recv_queue.put(payload)
+                elif opcode == _OP_PING:
+                    if self._writer:
+                        self._writer.write(_build_ws_frame(payload, _OP_PONG))
+                        await self._writer.drain()
+                elif opcode == _OP_CLOSE:
+                    _LOGGER.debug("WebSocket closed by server")
+                    break
+                # Other frame types (pong, continuation) are ignored
+        except asyncio.CancelledError:
+            raise
+        except (asyncio.IncompleteReadError, ConnectionResetError, OSError) as err:
+            _LOGGER.debug("Connection lost: %s", err)
+        finally:
+            self._connected = False
+
     async def disconnect(self) -> None:
         """Close the WebSocket connection."""
         self._connected = False
         self.bind_id = None
         self.authtoken = None
+        if self._reader_task:
+            self._reader_task.cancel()
+            try:
+                await self._reader_task
+            except asyncio.CancelledError:
+                pass
+            self._reader_task = None
         if self._writer:
             try:
                 # Send WebSocket close frame
@@ -354,41 +394,34 @@ class SkyRemoteClient:
             raise SkyRemoteConnectionError(f"Connection lost: {err}") from err
 
     async def _recv(self, timeout: float = 10.0) -> dict:
-        if not self._reader or not self._connected:
+        if not self._connected:
             raise SkyRemoteConnectionError("Not connected")
         try:
-            while True:
-                opcode, payload = await asyncio.wait_for(
-                    _read_ws_frame(self._reader), timeout=timeout
-                )
-                if opcode == _OP_TEXT:
-                    return json.loads(payload.decode("utf-8"))
-                if opcode == _OP_PING:
-                    if self._writer:
-                        self._writer.write(_build_ws_frame(payload, _OP_PONG))
-                        await self._writer.drain()
-                    continue
-                if opcode == _OP_CLOSE:
-                    self._connected = False
-                    raise SkyRemoteConnectionError("WebSocket closed by server")
-        except (ConnectionResetError, OSError, BrokenPipeError) as err:
-            self._connected = False
-            raise SkyRemoteConnectionError(f"Connection lost: {err}") from err
-            # Skip other frame types (pong, continuation, etc.)
+            payload = await asyncio.wait_for(
+                self._recv_queue.get(), timeout=timeout
+            )
+        except asyncio.TimeoutError as err:
+            if not self._connected:
+                raise SkyRemoteConnectionError("Connection lost") from err
+            raise SkyRemoteConnectionError(
+                "Timed out waiting for STB response"
+            ) from err
+        return json.loads(payload.decode("utf-8"))
 
     async def pair(self) -> dict:
         """Send Pair Request, return Pair Response."""
         self.tid = str(uuid.uuid4())
         self.controllernonce = str(uuid.uuid4())
-        await self._send({
-            "command_name": "Pair Request",
-            "tid": self.tid,
-            "name": "Soft Remote",
-            "manufacturer": "Comcast",
-            "model": "IPRemote",
-            "controllernonce": self.controllernonce,
-        })
-        resp = await self._recv()
+        async with self._request_lock:
+            await self._send({
+                "command_name": "Pair Request",
+                "tid": self.tid,
+                "name": "Soft Remote",
+                "manufacturer": "Comcast",
+                "model": "IPRemote",
+                "controllernonce": self.controllernonce,
+            })
+            resp = await self._recv()
         if not resp.get("status"):
             raise SkyRemoteAuthError(f"Pair failed: {resp}")
         self.device_name = resp.get("name", "Unknown")
@@ -403,12 +436,13 @@ class SkyRemoteClient:
             controllernonce=self.controllernonce,
             stbnonce=stbnonce,
         )
-        await self._send({
-            "command_name": "Bind Request",
-            "tid": self.tid,
-            "authtoken": self.authtoken,
-        })
-        resp = await self._recv()
+        async with self._request_lock:
+            await self._send({
+                "command_name": "Bind Request",
+                "tid": self.tid,
+                "authtoken": self.authtoken,
+            })
+            resp = await self._recv()
         if not resp.get("status"):
             raise SkyRemoteAuthError(f"Bind failed: {resp}")
         self.bind_id = resp.get("bind_id")
@@ -427,12 +461,16 @@ class SkyRemoteClient:
         """Send a key command. Returns the STB response."""
         if not self.connected:
             raise SkyRemoteConnectionError("Not connected/bound")
-        await self._send({
-            "command_name": "Key Command Request",
-            "tid": self.tid,
-            "authtoken": self.authtoken,
-            "bind_id": self.bind_id,
-            "cmd": "keyatomic",
-            "key": key,
-        })
-        return await self._recv(timeout=5.0)
+        async with self._request_lock:
+            await self._send({
+                "command_name": "Key Command Request",
+                "tid": self.tid,
+                "authtoken": self.authtoken,
+                "bind_id": self.bind_id,
+                "cmd": "keyatomic",
+                "key": key,
+            })
+            resp = await self._recv(timeout=5.0)
+        if not resp.get("status"):
+            _LOGGER.warning("Key %s rejected by STB: %s", key, resp)
+        return resp

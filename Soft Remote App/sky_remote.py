@@ -20,7 +20,6 @@ import pathlib
 import re
 import socket
 import ssl
-import struct
 import sys
 import tempfile
 import time
@@ -67,10 +66,9 @@ except ImportError:
     sys.exit(1)
 
 try:
-    import websockets
-    import websockets.client
+    from websockets.asyncio.client import connect as ws_connect
 except ImportError:
-    print("Missing dependency: pip install websockets")
+    print("Missing dependency: pip install 'websockets>=13'")
     sys.exit(1)
 
 
@@ -192,10 +190,16 @@ def discover_devices(timeout: float = 5.0) -> list:
     listener = Listener()
     ServiceBrowser(zc, MDNS_SERVICE_TYPE, listener)
 
+    # After the first device appears, keep scanning for a short grace
+    # period so additional boxes on the network can also be found.
     deadline = time.monotonic() + timeout
+    grace_deadline = None
     while time.monotonic() < deadline:
         if devices:
-            break
+            if grace_deadline is None:
+                grace_deadline = time.monotonic() + 2.0
+            elif time.monotonic() >= grace_deadline:
+                break
         time.sleep(0.2)
 
     zc.close()
@@ -281,18 +285,18 @@ class SkyRemoteClient:
 
     async def connect(self):
         uri = f"wss://{self.host}:{self.port}/iptarget"
-        extra_headers = {
+        additional_headers = {
             "Cache-Control": "no-cache",
             "Accept-Encoding": "gzip",
         }
         self._ssl_ctx.check_hostname = False
-        self.ws = await websockets.client.connect(
+        self.ws = await ws_connect(
             uri,
             ssl=self._ssl_ctx,
             server_hostname="sky.xcal.tv",
             origin=f"https://{self.host}:{self.port}/",
             user_agent_header="Dart/3.9 (dart:io)",
-            extra_headers=extra_headers,
+            additional_headers=additional_headers,
             compression=None,
             open_timeout=10,
             ping_interval=20,
@@ -535,8 +539,6 @@ def draw_remote(stdscr, device_name: str, connected: bool):
     for msg in MSG_LOG[-min(MAX_LOG_LINES, max(h - y - 1, 1)):]:
         cprint(y, 4, msg, curses.A_DIM)
         y += 1
-        if y >= h - 1:
-            break
         if y >= h - 1:
             break
 
