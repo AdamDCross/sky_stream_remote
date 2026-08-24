@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Iterable
 
@@ -95,8 +96,6 @@ class SkyRemote(CoordinatorEntity[SkyRemoteCoordinator], RemoteEntity):
         """
         num_repeats = kwargs.get("num_repeats", 1)
         delay_secs = kwargs.get("delay_secs", 0.2)
-
-        import asyncio
 
         for _ in range(num_repeats):
             for cmd in command:

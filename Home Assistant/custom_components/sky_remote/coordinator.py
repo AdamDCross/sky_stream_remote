@@ -13,6 +13,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -131,7 +132,7 @@ class SkyRemoteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 try:
                     await self.async_connect()
                 except (SkyRemoteError, OSError) as err:
-                    raise UpdateFailed(
+                    raise HomeAssistantError(
                         f"Cannot send key — not connected: {err}"
                     ) from err
             try:
@@ -143,8 +144,8 @@ class SkyRemoteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 await self.client.disconnect()
                 if attempt == 0:
                     continue  # retry once after reconnect
-                raise UpdateFailed(f"Key send failed: {err}") from err
-        raise UpdateFailed("Key send failed after retries")
+                raise HomeAssistantError(f"Key send failed: {err}") from err
+        raise HomeAssistantError("Key send failed after retries")
 
     async def async_wake(self) -> None:
         """Send Wake-on-LAN and reconnect."""

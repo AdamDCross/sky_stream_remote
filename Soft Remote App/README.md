@@ -5,13 +5,13 @@ This folder contains a standalone Python Sky Stream soft remote TUI plus the ext
 ## Requirements
 
 - Python 3.9+
-- `websockets`
+- `websockets` (13.0 or newer — the script uses the modern `websockets.asyncio` API)
 - `zeroconf`
 
 Install the Python dependencies with:
 
 ```bash
-pip install websockets zeroconf
+pip install "websockets>=13" zeroconf
 ```
 
 ## Usage
